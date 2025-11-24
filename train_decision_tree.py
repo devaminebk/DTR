@@ -20,6 +20,8 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import mean_absolute_error
 import joblib
 import scipy.io
+import matplotlib.pyplot as plt
+from sklearn.tree import plot_tree
 
 
 # Re-implement antenna metric function (copied/adapted from test_model_FFNN.py)
@@ -141,7 +143,7 @@ def load_data(script_dir):
     return X_train, X_test, y_train, y_test
 
 
-def main(model_name='decision_tree', random_state=46, gridsearch=False, n_estimators=100):
+def main(model_name='decision_tree', random_state=46, gridsearch=False, n_estimators=100, plot_tree_flag=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
     X_train, X_test, y_train, y_test = load_data(script_dir)
@@ -211,6 +213,37 @@ def main(model_name='decision_tree', random_state=46, gridsearch=False, n_estima
     print('Main-lobe gain MAE:', np.mean(gain_mae_list))
     print('SSL MAE:', np.mean(SSL_mae_list))
 
+    # Optional: plot / save a visualization of the trained decision tree
+    if plot_tree_flag:
+        try:
+            # For RandomForest, visualize the first estimator; otherwise use the single tree
+            if model_name == 'random_forest' and hasattr(model, 'estimators_'):
+                estimator = model.estimators_[0]
+            else:
+                estimator = model
+
+            n_feats = X_train.shape[1]
+            if n_feats == 4:
+                feature_names = ['main_lobe_gain', 'SSL', 'HPBW', 'theta0']
+            else:
+                feature_names = [f'feat_{i}' for i in range(n_feats)]
+
+            plt.figure(figsize=(20, 10))
+            plot_tree(estimator, feature_names=feature_names, filled=True, rounded=True, fontsize=8)
+            tree_plot_path = os.path.join(script_dir, f'{model_name}_tree.png')
+            # remove previous visualization if present to avoid stale files
+            try:
+                if os.path.exists(tree_plot_path):
+                    os.remove(tree_plot_path)
+            except Exception:
+                pass
+            plt.title('Decision tree visualization')
+            plt.savefig(tree_plot_path, bbox_inches='tight', dpi=150)
+            plt.close()
+            print('\nSaved tree visualization to:', tree_plot_path)
+        except Exception as e:
+            print('\nCould not generate tree plot:', e)
+
     # Save model and predictions
     model_path = os.path.join(script_dir, f'{model_name}_model.joblib')
     joblib.dump(model, model_path)
@@ -240,5 +273,6 @@ if __name__ == '__main__':
     parser.add_argument('--random-state', type=int, default=46)
     parser.add_argument('--gridsearch', action='store_true')
     parser.add_argument('--n-estimators', type=int, default=100)
+    parser.add_argument('--plot-tree', dest='plot_tree', action='store_true', help='Save a visualization PNG of the trained tree')
     args = parser.parse_args()
-    main(model_name=args.model, random_state=args.random_state, gridsearch=args.gridsearch, n_estimators=args.n_estimators)
+    main(model_name=args.model, random_state=args.random_state, gridsearch=args.gridsearch, n_estimators=args.n_estimators, plot_tree_flag=args.plot_tree)
